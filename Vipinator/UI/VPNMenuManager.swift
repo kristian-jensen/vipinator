@@ -23,8 +23,6 @@ class VPNMenuManager: NSObject, NSMenuDelegate {
     private let quitMenuItem = NSMenuItem(title: "Quit",
                                           action: #selector(NSApplication.terminate(_:)),
                                           keyEquivalent: "q")
-    
-    private static let lastUsedVPNKey = "LastUsedVPNName"
 
     init(statusItemManager: VPNStatusItemManager) {
         self.statusItemManager = statusItemManager
@@ -135,7 +133,7 @@ class VPNMenuManager: NSObject, NSMenuDelegate {
         if vpnConnections.isEmpty {
             await loadVPNConnections()
         }
-        let name = loadLastUsedVPN() ?? ""
+        let name = VPNManager.loadLastUsedVPN() ?? ""
         guard
               let vpn = vpnConnections.first(where: { $0.name == name }) ?? vpnConnections.first else { return }
         await toggleVPN(vpn)
@@ -161,7 +159,7 @@ class VPNMenuManager: NSObject, NSMenuDelegate {
         do {
             let success = try await VPNManager.connect(to: vpn)
             if success {
-                saveLastUsedVPN(vpn.name)
+                VPNManager.saveLastUsedVPN(vpn.name)
             } else {
                 print("Failed to connect to VPN: \(vpn.name)")
             }
@@ -203,13 +201,5 @@ class VPNMenuManager: NSObject, NSMenuDelegate {
         }
 
         statusItemManager.updateStatus(isConnected: isAnyVPNConnected)
-    }
-    
-    private func saveLastUsedVPN(_ name: String) {
-        UserDefaults.standard.set(name, forKey: Self.lastUsedVPNKey)
-    }
-    
-    private func loadLastUsedVPN() -> String? {
-        UserDefaults.standard.string(forKey: Self.lastUsedVPNKey)
     }
 }

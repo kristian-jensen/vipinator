@@ -18,7 +18,44 @@ struct VPNConnection: Identifiable, Equatable {
     var status: VPNStatus = .disconnected
 }
 
+enum ReconnectAtStartup {
+    static let defaultsKey = "ReconnectAtStartup"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: defaultsKey)
+    }
+}
+
+enum ReconnectAfterSleep {
+    static let defaultsKey = "ReconnectAfterSleep"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: defaultsKey)
+    }
+}
+
+enum LastUsedVPN {
+    static let defaultsKey = "LastUsedVPNName"
+
+    static var name: String? {
+        get {
+            UserDefaults.standard.string(forKey: defaultsKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: defaultsKey)
+        }
+    }
+}
+
 enum VPNManager {
+    static func saveLastUsedVPN(_ name: String) {
+        LastUsedVPN.name = name
+    }
+
+    static func loadLastUsedVPN() -> String? {
+        LastUsedVPN.name
+    }
+
     static func getAvailableVPNs() async throws -> [VPNConnection] {
         let output = try await runNetworkSetupCommand(arguments: ["-listnetworkserviceorder"])
         return parseNetworkServices(output)
@@ -43,6 +80,56 @@ enum VPNManager {
         try await Task.sleep(for: .seconds(2))
         let finalStatus = try await getStatus(for: connection)
         return (initialStatus == .connected) && (finalStatus != .connected)
+    }
+
+    static func getConnectedVPNs() async throws -> [VPNConnection] {
+        var connectedVPNs: [VPNConnection] = []
+
+        for connection in try await getAvailableVPNs() {
+            let status = try await getStatus(for: connection)
+            if status == .connected {
+                connectedVPNs.append(connection)
+            }
+        }
+
+        return connectedVPNs
+    }
+
+    static func connectLastUsedVPNOnLaunchIfNeeded() async {
+        guard ReconnectAtStartup.isEnabled,
+              let vpnName = loadLastUsedVPN() else { return }
+
+        do {
+            let connections = try await getAvailableVPNs()
+            guard let connection = connections.first(where: { $0.name == vpnName }) else { return }
+            let status = try await getStatus(for: connection)
+
+            guard status == .disconnected else { return }
+            let success = try await connect(to: connection)
+            if !success {
+                print("Failed to reconnect VPN on launch: \(connection.name)")
+            }
+        } catch {
+            print("Error reconnecting VPN on launch: \(error)")
+        }
+    }
+
+    static func reconnectAfterWakeIfNeeded(connections: [VPNConnection]) async {
+        guard ReconnectAfterSleep.isEnabled else { return }
+
+        for connection in connections {
+            do {
+                let status = try await getStatus(for: connection)
+                guard status == .disconnected else { continue }
+
+                let success = try await connect(to: connection)
+                if !success {
+                    print("Failed to reconnect VPN after wake: \(connection.name)")
+                }
+            } catch {
+                print("Error reconnecting VPN after wake: \(connection.name). \(error)")
+            }
+        }
     }
 
     private static func runNetworkSetupCommand(arguments: [String], allowEmptyOutput: Bool = false) async throws -> String {
