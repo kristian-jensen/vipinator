@@ -172,7 +172,11 @@ class VPNMenuManager: NSObject, NSMenuDelegate {
     private func disconnectVPN(_ vpn: VPNConnection) async {
         do {
             let success = try await VPNManager.disconnect(from: vpn)
-            if !success { print("Failed to disconnect from VPN: \(vpn.name)") }
+            if success {
+                VPNManager.clearLastUsedVPN()
+            } else {
+                print("Failed to disconnect from VPN: \(vpn.name)")
+            }
             await updateVPNStatuses()
         } catch {
             print("Error disconnecting from VPN: \(vpn.name). \(error)")

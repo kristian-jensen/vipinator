@@ -56,6 +56,10 @@ enum VPNManager {
         LastUsedVPN.name
     }
 
+    static func clearLastUsedVPN() {
+        LastUsedVPN.name = nil
+    }
+
     static func getAvailableVPNs() async throws -> [VPNConnection] {
         let output = try await runNetworkSetupCommand(arguments: ["-listnetworkserviceorder"])
         return parseNetworkServices(output)
